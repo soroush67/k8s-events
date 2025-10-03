@@ -1,0 +1,65 @@
+curl -X PUT "http://192.168.250.111:9200/k8s-events" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "mappings": {
+      "properties": {
+        "reason": { "type": "keyword" },
+        "message": { "type": "text" },
+        "namespace": { "type": "keyword" },
+        "type": { "type": "keyword" },
+        "count": { "type": "integer" },
+        "firstTimestamp": { "type": "date" },
+        "lastTimestamp": { "type": "date" },
+        "eventTime": { "type": "date" },
+        "reportingComponent": { "type": "keyword" },
+        "reportingInstance": { "type": "keyword" },
+        "involvedObject": {
+          "properties": {
+            "kind": { "type": "keyword" },
+            "namespace": { "type": "keyword" },
+            "name": { "type": "keyword" },
+            "uid": { "type": "keyword" },
+            "apiVersion": { "type": "keyword" },
+            "fieldPath": { "type": "keyword" },
+            "deleted": { "type": "boolean" }
+          }
+        }
+      }
+    }
+  }'
+---
+curl -X POST "http://192.168.250.111:9200/k8s-events/_doc" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "reason": "Killing",
+    "message": "Stopping container nginx",
+    "namespace": "default",
+    "type": "Normal",
+    "count": 1,
+    "firstTimestamp": "2025-10-03T12:40:00Z",
+    "lastTimestamp": "2025-10-03T12:40:00Z",
+    "eventTime": "2025-10-03T12:40:00Z",
+    "reportingComponent": "kubelet",
+    "reportingInstance": "worker1",
+    "involvedObject": {
+      "kind": "Pod",
+      "namespace": "default",
+      "name": "nginx-test",
+      "uid": "abc-123",
+      "apiVersion": "v1",
+      "fieldPath": "spec.containers{nginx}",
+      "deleted": false
+    }
+  }'
+
+---
+curl -X POST "http://elasticsearch:5601/api/data_views/data_view" \
+  -H 'kbn-xsrf: true' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "data_view": {
+      "title": "k8s-events*",
+      "name": "k8s-events",
+      "timeFieldName": "firstTimestamp"
+    }
+  }'
