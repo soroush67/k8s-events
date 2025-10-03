@@ -1,0 +1,92 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kube-events
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: event-exporter-sa
+  namespace: kube-events
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: event-exporter-role
+rules:
+- apiGroups: [""]
+  resources: ["events", "pods", "namespaces", "nodes"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["replicasets", "deployments"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: event-exporter-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: event-exporter-role
+subjects:
+- kind: ServiceAccount
+  name: event-exporter-sa
+  namespace: kube-events
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: event-exporter-cfg
+  namespace: kube-events
+data:
+  config.yaml: |
+    logLevel: debug
+    logFormat: json
+    omitLookup: true
+    receivers:
+    - name: "es"
+      elasticsearch:
+        hosts:
+        - "http://192.168.250.111:9200"
+        index: "k8s-events"
+        useEventID: true
+    route:
+      routes:
+      - match:
+        - receiver: "es"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: event-exporter
+  namespace: kube-events
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: event-exporter
+  template:
+    metadata:
+      labels:
+        app: event-exporter
+    spec:
+      serviceAccountName: event-exporter-sa
+      containers:
+      - name: event-exporter
+        image: ghcr.io/resmoio/kubernetes-event-exporter:latest
+        args:
+        - -conf=/config.yaml
+        volumeMounts:
+        - name: config
+          mountPath: /config.yaml
+          subPath: config.yaml
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: event-exporter-cfg
+          items:
+          - key: config.yaml
+            path: config.yaml
+
